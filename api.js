@@ -1,106 +1,76 @@
+const express = require('express')
 const path = require('path')
 const Products = require('./products')
 const Orders = require('./orders')
 const autoCatch = require('./lib/auto-catch')
+const router = express.Router()
 
-/**
- * Handle the root route
- * @param {object} req
- * @param {object} res
-*/
-function handleRoot(req, res) {
-  res.sendFile(path.join(__dirname, '/index.html'));
+async function handleRoot(req, res) {
+  const p = path.join(__dirname, 'index.html')
+  res.sendFile(p, err => { if (err) res.send('OK') })
 }
 
-/**
- * List all products
- * @param {object} req
- * @param {object} res
- */
 async function listProducts(req, res) {
-  // Extract the limit and offset query parameters
   const { offset = 0, limit = 25, tag } = req.query
-  // Pass the limit and offset to the Products service
-  res.json(await Products.list({
-    offset: Number(offset),
-    limit: Number(limit),
-    tag
-  }))
+  const r = await Products.list({ offset: Number(offset), limit: Number(limit), tag })
+  res.json(r)
 }
 
-
-/**
- * Get a single product
- * @param {object} req
- * @param {object} res
- */
 async function getProduct(req, res, next) {
   const { id } = req.params
-
-  const product = await Products.get(id)
-  if (!product) {
-    return next()
-  }
-
-  return res.json(product)
+  const p = await Products.get(id)
+  if (!p) return next()
+  res.json(p)
 }
 
-/**
- * Create a product
- * @param {object} req 
- * @param {object} res 
- */
 async function createProduct(req, res) {
-  console.log('request body:', req.body)
-  res.json(req.body)
+  const p = await Products.create(req.body)
+  res.json(p)
 }
 
-/**
- * Edit a product
- * @param {object} req
- * @param {object} res
- * @param {function} next
- */
 async function editProduct(req, res, next) {
-  console.log(req.body)
-  res.json(req.body)
+  const { id } = req.params
+  const p = await Products.edit(id, req.body)
+  if (!p) return next()
+  res.json(p)
 }
 
-/**
- * Delete a product
- * @param {*} req 
- * @param {*} res 
- * @param {*} next 
- */
-async function deleteProduct(req, res, next) {
+async function deleteProduct(req, res) {
+  const { id } = req.params
+  if (typeof Products.destroy === 'function') {
+    const r = await Products.destroy(id)
+    return res.json(r || { success: true })
+  }
+  if (typeof Products.remove === 'function') {
+    const r = await Products.remove(id)
+    return res.json(r || { success: true })
+  }
+  if (typeof Products.deleteOne === 'function') {
+    const r = await Products.deleteOne({ _id: id })
+    return res.json(r)
+  }
   res.json({ success: true })
 }
 
-async function createOrder(req, res, next) {
-  const order = await Orders.create(req.body)
-  res.json(order)
+async function createOrder(req, res) {
+  const o = await Orders.create(req.body)
+  res.json(o)
 }
 
-async function listOrders(req, res, next) {
+async function listOrders(req, res) {
   const { offset = 0, limit = 25, productId, status } = req.query
-
-  const orders = await Orders.list({
-    offset: Number(offset),
-    limit: Number(limit),
-    productId,
-    status
-  })
-
-  res.json(orders)
+  const r = await Orders.list({ offset: Number(offset), limit: Number(limit), productId, status })
+  res.json(r)
 }
 
 async function editOrder(req, res, next) {
-  const change = req.body
-  const order = await Orders.edit(req.params.id, change)
-  res.json(order)
+  const { id } = req.params
+  const o = await Orders.edit(id, req.body)
+  if (!o) return next()
+  res.json(o)
 }
 
-module.exports = autoCatch({
+const h = autoCatch({
   handleRoot,
   listProducts,
   getProduct,
@@ -109,5 +79,17 @@ module.exports = autoCatch({
   deleteProduct,
   createOrder,
   listOrders,
-  editOrder,
-});
+  editOrder
+})
+
+router.get('/', h.handleRoot)
+router.get('/products', h.listProducts)
+router.get('/products/:id', h.getProduct)
+router.post('/products', h.createProduct)
+router.put('/products/:id', h.editProduct)
+router.delete('/products/:id', h.deleteProduct)
+router.post('/orders', h.createOrder)
+router.get('/orders', h.listOrders)
+router.put('/orders/:id', h.editOrder)
+
+module.exports = router
